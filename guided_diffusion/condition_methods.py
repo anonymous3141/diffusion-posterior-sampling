@@ -82,7 +82,21 @@ class PosteriorSampling(ConditioningMethod):
         self.scale = kwargs.get('scale', 1.0)
 
     def conditioning(self, x_prev, x_t, x_0_hat, measurement, **kwargs):
-        norm_grad, norm = self.grad_and_value(x_prev=x_prev, x_0_hat=x_0_hat, measurement=measurement, **kwargs)
+        norm_grad, norm = None, None
+        if kwargs.get("smart_mode",False):
+            # use gradient free estimation
+            # TODO: use a pipeline to get the x_0_hat_fn
+            x_0_hat_fn = kwargs.get("x_0_hat_fn")
+            x_0_hat_detached = x_0_hat.detach()
+            difference = measurement - self.operator.forward(x_0_hat_detached, **kwargs)
+            norm = torch.linalg.norm(difference)
+            norm_grad_partial = torch.autograd.grad(outputs=norm, inputs=x_0_hat_detached)[0]
+           
+            # TODO: debug the scale of this quantity and the error
+            with torch.no_grad():
+                norm_grad = (x_0_hat_fn(x_prev + norm_grad_partial * self.eps) - x_0_hat_detached)/self.eps
+        else:
+            norm_grad, norm = self.grad_and_value(x_prev=x_prev, x_0_hat=x_0_hat, measurement=measurement, **kwargs)
         x_t -= norm_grad * self.scale
         return x_t, norm
         
