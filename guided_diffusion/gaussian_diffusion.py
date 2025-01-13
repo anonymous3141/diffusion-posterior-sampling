@@ -173,7 +173,8 @@ class GaussianDiffusion:
                       measurement,
                       measurement_cond_fn,
                       record,
-                      save_root):
+                      save_root,
+                      fast_sampling = False):
         """
         The function used for sampling from noise.
         """ 
@@ -181,11 +182,24 @@ class GaussianDiffusion:
         device = x_start.device
 
         pbar = tqdm(list(range(self.num_timesteps))[::-1])
+
+        def x_hat_0_fn(img, time):
+            with torch.no_grad():
+                out = self.p_sample(x=img, t=time, model=model)
+                return out['pred_xstart']
+        
         for idx in pbar:
             time = torch.tensor([idx] * img.shape[0], device=device)
             
             img = img.requires_grad_()
-            out = self.p_sample(x=img, t=time, model=model)
+
+            out = None
+
+            if fast_sampling:
+                with torch.no_grad():
+                    out = self.p_sample(x=img, t=time, model=model)
+            else:
+                out = self.p_sample(x=img, t=time, model=model)
             
             # Give condition.
             noisy_measurement = self.q_sample(measurement, t=time)
@@ -195,7 +209,10 @@ class GaussianDiffusion:
                                       measurement=measurement,
                                       noisy_measurement=noisy_measurement,
                                       x_prev=img,
-                                      x_0_hat=out['pred_xstart'])
+                                      x_0_hat=out['pred_xstart'],
+                                      x_hat_0_fn = x_hat_0_fn,
+                                      smart_mode = fast_sampling,
+                                      time = time)
             img = img.detach_()
            
             pbar.set_postfix({'distance': distance.item()}, refresh=False)

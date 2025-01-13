@@ -80,6 +80,7 @@ class PosteriorSampling(ConditioningMethod):
     def __init__(self, operator, noiser, **kwargs):
         super().__init__(operator, noiser)
         self.scale = kwargs.get('scale', 1.0)
+        self.eps = kwargs.get('eps', 0.001)
 
     def conditioning(self, x_prev, x_t, x_0_hat, measurement, **kwargs):
         norm_grad, norm = None, None
@@ -94,7 +95,7 @@ class PosteriorSampling(ConditioningMethod):
            
             # TODO: debug the scale of this quantity and the error
             with torch.no_grad():
-                norm_grad = (x_0_hat_fn(x_prev + norm_grad_partial * self.eps) - x_0_hat_detached)/self.eps
+                norm_grad = (x_0_hat_fn(x_prev + norm_grad_partial * self.eps, kwargs['time']) - x_0_hat_detached)/self.eps
         else:
             norm_grad, norm = self.grad_and_value(x_prev=x_prev, x_0_hat=x_0_hat, measurement=measurement, **kwargs)
         x_t -= norm_grad * self.scale
